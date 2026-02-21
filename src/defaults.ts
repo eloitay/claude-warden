@@ -59,8 +59,8 @@ export const DEFAULT_CONFIG: WardenConfig = {
       command: 'node',
       default: 'ask',
       argPatterns: [
-        { match: { anyArgMatches: ['^--(version|help)$', '^-[vhep]$'] }, decision: 'allow', description: 'Version/help flags' },
-        { match: { anyArgMatches: ['^-e$', '^--eval'] }, decision: 'ask', reason: 'Evaluating inline code' },
+        { match: { anyArgMatches: ['^-e$', '^--eval', '^-p$', '^--print'] }, decision: 'ask', reason: 'Evaluating inline code' },
+        { match: { anyArgMatches: ['^--(version|help)$', '^-[vh]$'] }, decision: 'allow', description: 'Version/help flags' },
         { match: { noArgs: true }, decision: 'ask', reason: 'Interactive REPL' },
       ],
     },

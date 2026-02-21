@@ -25,6 +25,7 @@ var __toESM = (mod, isNodeMode, target) => (target = mod != null ? __create(__ge
 // src/parser.ts
 var import_bash_parser = __toESM(require("bash-parser"), 1);
 var import_path = require("path");
+var HEREDOC_REGEX = /<<-?\s*['"]?\w+['"]?/;
 function convertCommand(node) {
   if (!node.name) return null;
   const command = node.name.text.includes("/") ? (0, import_path.basename)(node.name.text) : node.name.text;
@@ -136,6 +137,24 @@ function walkNode(node, result) {
 function parseCommand(input) {
   if (!input || !input.trim()) {
     return { commands: [], hasSubshell: false, parseError: false };
+  }
+  const hasHeredoc = HEREDOC_REGEX.test(input);
+  if (hasHeredoc) {
+    const firstLine = input.split("\n")[0];
+    const cmdPart = firstLine.replace(/<<-?\s*['"]?\w+['"]?.*$/, "").trim();
+    if (!cmdPart) {
+      return { commands: [], hasSubshell: false, parseError: true };
+    }
+    try {
+      const ast = (0, import_bash_parser.default)(cmdPart);
+      const result = { commands: [], hasSubshell: false };
+      for (const cmd of ast.commands) {
+        walkNode(cmd, result);
+      }
+      return { commands: result.commands, hasSubshell: true, parseError: false };
+    } catch {
+      return { commands: [], hasSubshell: true, parseError: true };
+    }
   }
   try {
     const ast = (0, import_bash_parser.default)(input);
@@ -402,8 +421,8 @@ var DEFAULT_CONFIG = {
       command: "node",
       default: "ask",
       argPatterns: [
-        { match: { anyArgMatches: ["^--(version|help)$", "^-[vhep]$"] }, decision: "allow", description: "Version/help flags" },
-        { match: { anyArgMatches: ["^-e$", "^--eval"] }, decision: "ask", reason: "Evaluating inline code" },
+        { match: { anyArgMatches: ["^-e$", "^--eval", "^-p$", "^--print"] }, decision: "ask", reason: "Evaluating inline code" },
+        { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" },
         { match: { noArgs: true }, decision: "ask", reason: "Interactive REPL" }
       ]
     },

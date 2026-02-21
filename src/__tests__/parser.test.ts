@@ -115,7 +115,7 @@ describe('parseCommand', () => {
 
   it('handles heredocs by extracting base command', () => {
     const result = parseCommand('cat <<EOF\nhello\nEOF');
-    // bash-parser handles heredocs natively — no longer needs hasSubshell hack
+    expect(result.hasSubshell).toBe(true); // heredocs flagged as complex
     expect(result.commands.length).toBeGreaterThanOrEqual(1);
     expect(result.commands[0].command).toBe('cat');
   });

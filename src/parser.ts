@@ -56,6 +56,8 @@ interface WalkResult {
   hasSubshell: boolean;
 }
 
+const HEREDOC_REGEX = /<<-?\s*['"]?\w+['"]?/;
+
 function convertCommand(node: CommandNode): ParsedCommand | null {
   if (!node.name) return null;
 
@@ -196,9 +198,43 @@ function walkNode(node: AstNode, result: WalkResult): void {
 /**
  * Parse a full shell command string into individual commands.
  */
+/**
+ * Check if a Command node contains a heredoc redirect (suffix with type 'dless').
+ */
+function hasHeredocRedirect(node: CommandNode): boolean {
+  if (!node.suffix) return false;
+  return node.suffix.some(s => s.type === 'dless' || s.type === 'dlessdash');
+}
+
+/**
+ * Parse a full shell command string into individual commands.
+ */
 export function parseCommand(input: string): ParseResult {
   if (!input || !input.trim()) {
     return { commands: [], hasSubshell: false, parseError: false };
+  }
+
+  // Detect heredocs before parsing — bash-parser misparses heredoc body as commands.
+  // Pre-strip heredoc content and only parse the command portion.
+  const hasHeredoc = HEREDOC_REGEX.test(input);
+  if (hasHeredoc) {
+    // Extract just the first line (the actual command before the heredoc)
+    const firstLine = input.split('\n')[0];
+    const cmdPart = firstLine.replace(/<<-?\s*['"]?\w+['"]?.*$/, '').trim();
+    if (!cmdPart) {
+      return { commands: [], hasSubshell: false, parseError: true };
+    }
+    try {
+      const ast = parse(cmdPart) as ScriptNode;
+      const result: WalkResult = { commands: [], hasSubshell: false };
+      for (const cmd of ast.commands) {
+        walkNode(cmd, result);
+      }
+      // Heredocs are complex — flag as hasSubshell so evaluator can decide
+      return { commands: result.commands, hasSubshell: true, parseError: false };
+    } catch {
+      return { commands: [], hasSubshell: true, parseError: true };
+    }
   }
 
   try {
