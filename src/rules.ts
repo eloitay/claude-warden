@@ -62,6 +62,9 @@ function mergeConfig(base: WardenConfig, override: Partial<WardenConfig>): void 
   if (override.globalDeny) {
     base.globalDeny = [...(base.globalDeny || []), ...override.globalDeny];
   }
+  if (override.trustedSSHHosts) {
+    base.trustedSSHHosts = [...(base.trustedSSHHosts || []), ...override.trustedSSHHosts];
+  }
   if (override.defaultDecision) {
     base.defaultDecision = override.defaultDecision;
   }

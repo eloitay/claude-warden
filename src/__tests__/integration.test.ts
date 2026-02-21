@@ -2,11 +2,17 @@ import { describe, it, expect } from 'vitest';
 import { parseCommand } from '../parser';
 import { evaluate } from '../evaluator';
 import { DEFAULT_CONFIG } from '../defaults';
+import type { WardenConfig } from '../types';
 
 /** Simulate the full pipeline: parse → evaluate with default config */
 function warden(command: string) {
   const parsed = parseCommand(command);
   return evaluate(parsed, DEFAULT_CONFIG);
+}
+
+function wardenWithSSH(command: string, trustedHosts: string[]) {
+  const config: WardenConfig = { ...structuredClone(DEFAULT_CONFIG), trustedSSHHosts: trustedHosts };
+  return evaluate(parseCommand(command), config);
 }
 
 describe('integration: realistic commands', () => {
@@ -141,6 +147,42 @@ describe('integration: realistic commands', () => {
 
     it('npm publish → ask', () => {
       expect(warden('npm publish').decision).toBe('ask');
+    });
+  });
+
+  describe('SSH host whitelisting end-to-end', () => {
+    const hosts = ['devserver', '*.internal.com'];
+
+    it('ssh devserver → allow (trusted, no remote cmd)', () => {
+      expect(wardenWithSSH('ssh devserver', hosts).decision).toBe('allow');
+    });
+
+    it('ssh devserver cat /etc/hosts → allow (trusted + safe cmd)', () => {
+      expect(wardenWithSSH('ssh devserver cat /etc/hosts', hosts).decision).toBe('allow');
+    });
+
+    it('ssh devserver sudo rm -rf / → deny (trusted + dangerous cmd)', () => {
+      expect(wardenWithSSH('ssh devserver sudo rm -rf /', hosts).decision).toBe('deny');
+    });
+
+    it('ssh unknown-host → ask (not trusted)', () => {
+      expect(wardenWithSSH('ssh unknown-host', hosts).decision).toBe('ask');
+    });
+
+    it('scp file.txt devserver:/tmp/ → allow (trusted)', () => {
+      expect(wardenWithSSH('scp file.txt devserver:/tmp/', hosts).decision).toBe('allow');
+    });
+
+    it('ssh -i key -p 2222 devserver ls → allow (flags skipped)', () => {
+      expect(wardenWithSSH('ssh -i key -p 2222 devserver ls', hosts).decision).toBe('allow');
+    });
+
+    it('ssh devserver npm run build && echo done → allow (pipeline)', () => {
+      expect(wardenWithSSH('ssh devserver npm run build', hosts).decision).toBe('allow');
+    });
+
+    it('rsync -avz src/ user@app.internal.com:/opt/ → allow (glob match)', () => {
+      expect(wardenWithSSH('rsync -avz src/ user@app.internal.com:/opt/', hosts).decision).toBe('allow');
     });
   });
 

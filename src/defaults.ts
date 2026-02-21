@@ -3,6 +3,7 @@ import type { WardenConfig } from './types';
 export const DEFAULT_CONFIG: WardenConfig = {
   defaultDecision: 'ask',
   askOnSubshell: true,
+  trustedSSHHosts: [],
 
   alwaysAllow: [
     // Read-only file operations

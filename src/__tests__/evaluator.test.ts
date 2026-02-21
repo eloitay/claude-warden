@@ -2,9 +2,15 @@ import { describe, it, expect } from 'vitest';
 import { evaluate } from '../evaluator';
 import { parseCommand } from '../parser';
 import { DEFAULT_CONFIG } from '../defaults';
+import type { WardenConfig } from '../types';
 
 function eval_(cmd: string) {
   return evaluate(parseCommand(cmd), DEFAULT_CONFIG);
+}
+
+function evalWithSSH(cmd: string, trustedHosts: string[]) {
+  const config: WardenConfig = { ...structuredClone(DEFAULT_CONFIG), trustedSSHHosts: trustedHosts };
+  return evaluate(parseCommand(cmd), config);
 }
 
 describe('evaluator', () => {
@@ -197,6 +203,76 @@ describe('evaluator', () => {
     it('handles command with path', () => {
       // /usr/bin/node --version → node --version → allow
       expect(eval_('/usr/bin/node --version').decision).toBe('allow');
+    });
+  });
+
+  describe('SSH host whitelisting', () => {
+    const hosts = ['devserver', 'staging-*', '*.internal.com', '192.168.1.*'];
+
+    it('allows ssh to trusted host', () => {
+      expect(evalWithSSH('ssh devserver', hosts).decision).toBe('allow');
+    });
+
+    it('allows ssh with user@ to trusted host', () => {
+      expect(evalWithSSH('ssh user@devserver', hosts).decision).toBe('allow');
+    });
+
+    it('allows ssh with safe remote command on trusted host', () => {
+      expect(evalWithSSH('ssh devserver cat /etc/hosts', hosts).decision).toBe('allow');
+    });
+
+    it('denies ssh with dangerous remote command on trusted host', () => {
+      expect(evalWithSSH('ssh devserver sudo rm -rf /', hosts).decision).toBe('deny');
+    });
+
+    it('asks for ssh to untrusted host', () => {
+      expect(evalWithSSH('ssh unknown-host', hosts).decision).toBe('ask');
+    });
+
+    it('matches glob patterns', () => {
+      expect(evalWithSSH('ssh staging-web', hosts).decision).toBe('allow');
+      expect(evalWithSSH('ssh app.internal.com', hosts).decision).toBe('allow');
+      expect(evalWithSSH('ssh 192.168.1.50', hosts).decision).toBe('allow');
+    });
+
+    it('skips SSH flags correctly', () => {
+      expect(evalWithSSH('ssh -i key -p 2222 devserver ls', hosts).decision).toBe('allow');
+    });
+
+    it('skips boolean SSH flags', () => {
+      expect(evalWithSSH('ssh -v -A devserver ls', hosts).decision).toBe('allow');
+    });
+
+    it('allows scp to trusted host', () => {
+      expect(evalWithSSH('scp file.txt devserver:/tmp/', hosts).decision).toBe('allow');
+    });
+
+    it('allows scp from trusted host', () => {
+      expect(evalWithSSH('scp devserver:/tmp/file.txt .', hosts).decision).toBe('allow');
+    });
+
+    it('allows scp with user@ to trusted host', () => {
+      expect(evalWithSSH('scp file.txt user@devserver:/tmp/', hosts).decision).toBe('allow');
+    });
+
+    it('asks for scp to untrusted host', () => {
+      expect(evalWithSSH('scp file.txt unknown:/tmp/', hosts).decision).toBe('ask');
+    });
+
+    it('allows rsync to trusted host', () => {
+      expect(evalWithSSH('rsync -avz src/ devserver:/opt/app/', hosts).decision).toBe('allow');
+    });
+
+    it('asks for rsync to untrusted host', () => {
+      expect(evalWithSSH('rsync -avz src/ unknown:/opt/app/', hosts).decision).toBe('ask');
+    });
+
+    it('asks for ssh with no trusted hosts configured', () => {
+      expect(evalWithSSH('ssh devserver', []).decision).toBe('ask');
+    });
+
+    it('recursively evaluates ask-level remote commands', () => {
+      expect(evalWithSSH('ssh devserver node script.js', hosts).decision).toBe('ask');
     });
   });
 });

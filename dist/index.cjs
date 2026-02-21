@@ -215,6 +215,10 @@ function evaluateCommand(cmd, config) {
   if (config.alwaysAllow?.includes(command)) {
     return { command, args, decision: "allow", reason: `"${command}" is safe`, matchedRule: "alwaysAllow" };
   }
+  if ((command === "ssh" || command === "scp" || command === "rsync") && config.trustedSSHHosts?.length) {
+    const sshResult = evaluateSSHCommand(cmd, config);
+    if (sshResult) return sshResult;
+  }
   const rule = config.rules.find((r) => r.command === command);
   if (rule) {
     return evaluateRule(cmd, rule);
@@ -259,6 +263,109 @@ function evaluateRule(cmd, rule) {
     matchedRule: `${command}:default`
   };
 }
+var SSH_FLAGS_WITH_VALUE = /* @__PURE__ */ new Set([
+  "-b",
+  "-c",
+  "-D",
+  "-E",
+  "-e",
+  "-F",
+  "-I",
+  "-i",
+  "-J",
+  "-L",
+  "-l",
+  "-m",
+  "-O",
+  "-o",
+  "-p",
+  "-Q",
+  "-R",
+  "-S",
+  "-W",
+  "-w"
+]);
+function globToRegex(pattern) {
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, "\\$&").replace(/\*/g, ".*");
+  return new RegExp(`^${escaped}$`);
+}
+function matchesHost(host, patterns) {
+  return patterns.some((p) => globToRegex(p).test(host));
+}
+function parseSSHArgs(args) {
+  let host = null;
+  const remoteArgs = [];
+  let i = 0;
+  while (i < args.length) {
+    const arg = args[i];
+    if (SSH_FLAGS_WITH_VALUE.has(arg)) {
+      i += 2;
+      continue;
+    }
+    if (arg.startsWith("-")) {
+      i++;
+      continue;
+    }
+    if (!host) {
+      host = arg.includes("@") ? arg.split("@").pop() : arg;
+      i++;
+      while (i < args.length) {
+        remoteArgs.push(args[i]);
+        i++;
+      }
+      break;
+    }
+    i++;
+  }
+  return {
+    host,
+    remoteCommand: remoteArgs.length > 0 ? remoteArgs.join(" ") : null
+  };
+}
+function extractHostFromRemotePath(args) {
+  for (const arg of args) {
+    const match = arg.match(/^(?:[^@]+@)?([^:]+):/);
+    if (match) return match[1];
+  }
+  return null;
+}
+function evaluateSSHCommand(cmd, config) {
+  const { command, args } = cmd;
+  const trustedHosts = config.trustedSSHHosts || [];
+  if (command === "scp" || command === "rsync") {
+    const host2 = extractHostFromRemotePath(args);
+    if (host2 && matchesHost(host2, trustedHosts)) {
+      return {
+        command,
+        args,
+        decision: "allow",
+        reason: `Trusted SSH host "${host2}"`,
+        matchedRule: "trustedSSHHosts"
+      };
+    }
+    return null;
+  }
+  const { host, remoteCommand } = parseSSHArgs(args);
+  if (!host || !matchesHost(host, trustedHosts)) return null;
+  if (!remoteCommand) {
+    return {
+      command,
+      args,
+      decision: "allow",
+      reason: `Trusted SSH host "${host}" (interactive)`,
+      matchedRule: "trustedSSHHosts"
+    };
+  }
+  const parsed = parseCommand(remoteCommand);
+  const result = evaluate(parsed, config);
+  return {
+    command,
+    args,
+    decision: result.decision,
+    reason: `Trusted SSH host "${host}": ${result.reason}`,
+    matchedRule: "trustedSSHHosts"
+  };
+}
 
 // src/rules.ts
 var import_fs = require("fs");
@@ -270,6 +377,7 @@ var import_path2 = require("path");
 var DEFAULT_CONFIG = {
   defaultDecision: "ask",
   askOnSubshell: true,
+  trustedSSHHosts: [],
   alwaysAllow: [
     // Read-only file operations
     "cat",
@@ -597,6 +705,9 @@ function mergeConfig(base, override) {
   }
   if (override.globalDeny) {
     base.globalDeny = [...base.globalDeny || [], ...override.globalDeny];
+  }
+  if (override.trustedSSHHosts) {
+    base.trustedSSHHosts = [...base.trustedSSHHosts || [], ...override.trustedSSHHosts];
   }
   if (override.defaultDecision) {
     base.defaultDecision = override.defaultDecision;

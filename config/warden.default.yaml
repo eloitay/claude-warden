@@ -25,6 +25,15 @@ askOnSubshell: true
 #   - pattern: 'curl.*evil\\.com'
 #     reason: 'Blocked domain'
 
+# Trusted SSH hosts — ssh/scp/rsync to these hosts are auto-allowed.
+# Remote commands on trusted hosts are recursively evaluated through warden rules.
+# Supports glob patterns (* wildcards).
+# trustedSSHHosts:
+#   - devserver
+#   - staging-*
+#   - "*.internal.company.com"
+#   - 192.168.1.*
+
 # Command-specific rules (override built-in rules by command name)
 # rules:
 #   - command: npx

@@ -2,6 +2,7 @@ import type {
   ParseResult, WardenConfig, EvalResult, Decision,
   CommandEvalDetail, ParsedCommand, CommandRule,
 } from './types';
+import { parseCommand } from './parser';
 
 export function evaluate(parsed: ParseResult, config: WardenConfig): EvalResult {
   if (parsed.parseError) {
@@ -65,13 +66,19 @@ function evaluateCommand(cmd: ParsedCommand, config: WardenConfig): CommandEvalD
     return { command, args, decision: 'allow', reason: `"${command}" is safe`, matchedRule: 'alwaysAllow' };
   }
 
-  // 4. Command-specific rules
+  // 4. SSH host whitelisting with recursive remote command evaluation
+  if ((command === 'ssh' || command === 'scp' || command === 'rsync') && config.trustedSSHHosts?.length) {
+    const sshResult = evaluateSSHCommand(cmd, config);
+    if (sshResult) return sshResult;
+  }
+
+  // 5. Command-specific rules
   const rule = config.rules.find(r => r.command === command);
   if (rule) {
     return evaluateRule(cmd, rule);
   }
 
-  // 5. Default
+  // 6. Default
   return { command, args, decision: config.defaultDecision, reason: `No rule for "${command}"`, matchedRule: 'default' };
 }
 
@@ -118,5 +125,112 @@ function evaluateRule(cmd: ParsedCommand, rule: CommandRule): CommandEvalDetail 
     decision: rule.default,
     reason: `Default for "${command}"`,
     matchedRule: `${command}:default`,
+  };
+}
+
+/** SSH flags that consume the next argument (skip it when extracting host). */
+const SSH_FLAGS_WITH_VALUE = new Set([
+  '-b', '-c', '-D', '-E', '-e', '-F', '-I', '-i', '-J', '-L',
+  '-l', '-m', '-O', '-o', '-p', '-Q', '-R', '-S', '-W', '-w',
+]);
+
+/** Convert a glob pattern (with `*` wildcards) to a RegExp. */
+function globToRegex(pattern: string): RegExp {
+  const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*');
+  return new RegExp(`^${escaped}$`);
+}
+
+function matchesHost(host: string, patterns: string[]): boolean {
+  return patterns.some(p => globToRegex(p).test(host));
+}
+
+interface SSHParseResult {
+  host: string | null;
+  remoteCommand: string | null;
+}
+
+function parseSSHArgs(args: string[]): SSHParseResult {
+  let host: string | null = null;
+  const remoteArgs: string[] = [];
+  let i = 0;
+
+  while (i < args.length) {
+    const arg = args[i];
+    if (SSH_FLAGS_WITH_VALUE.has(arg)) {
+      i += 2; // skip flag and its value
+      continue;
+    }
+    if (arg.startsWith('-')) {
+      i++; // boolean flag
+      continue;
+    }
+    // First positional arg is host
+    if (!host) {
+      host = arg.includes('@') ? arg.split('@').pop()! : arg;
+      i++;
+      // Remaining positional args are the remote command
+      while (i < args.length) {
+        remoteArgs.push(args[i]);
+        i++;
+      }
+      break;
+    }
+    i++;
+  }
+
+  return {
+    host,
+    remoteCommand: remoteArgs.length > 0 ? remoteArgs.join(' ') : null,
+  };
+}
+
+/** Extract host from scp/rsync args like `[user@]host:path`. */
+function extractHostFromRemotePath(args: string[]): string | null {
+  for (const arg of args) {
+    const match = arg.match(/^(?:[^@]+@)?([^:]+):/);
+    if (match) return match[1];
+  }
+  return null;
+}
+
+function evaluateSSHCommand(cmd: ParsedCommand, config: WardenConfig): CommandEvalDetail | null {
+  const { command, args } = cmd;
+  const trustedHosts = config.trustedSSHHosts || [];
+
+  if (command === 'scp' || command === 'rsync') {
+    const host = extractHostFromRemotePath(args);
+    if (host && matchesHost(host, trustedHosts)) {
+      return {
+        command, args,
+        decision: 'allow',
+        reason: `Trusted SSH host "${host}"`,
+        matchedRule: 'trustedSSHHosts',
+      };
+    }
+    return null; // fall through to normal rules
+  }
+
+  // ssh
+  const { host, remoteCommand } = parseSSHArgs(args);
+  if (!host || !matchesHost(host, trustedHosts)) return null;
+
+  // Trusted host, no remote command
+  if (!remoteCommand) {
+    return {
+      command, args,
+      decision: 'allow',
+      reason: `Trusted SSH host "${host}" (interactive)`,
+      matchedRule: 'trustedSSHHosts',
+    };
+  }
+
+  // Trusted host with remote command — recursively evaluate
+  const parsed = parseCommand(remoteCommand);
+  const result = evaluate(parsed, config);
+  return {
+    command, args,
+    decision: result.decision,
+    reason: `Trusted SSH host "${host}": ${result.reason}`,
+    matchedRule: 'trustedSSHHosts',
   };
 }

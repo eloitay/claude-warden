@@ -49,6 +49,7 @@ export interface WardenConfig {
   globalDeny?: GlobalPattern[];
   alwaysAllow?: string[];
   alwaysDeny?: string[];
+  trustedSSHHosts?: string[];
   defaultDecision: Decision;
   askOnSubshell: boolean;
 }
