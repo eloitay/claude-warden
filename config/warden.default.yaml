@@ -1,0 +1,40 @@
+# Claude Warden - Default Configuration Reference
+#
+# Copy to ~/.claude/warden.yaml or .claude/warden.yaml (project-level) to customize.
+# Project-level config overrides user-level config, which overrides defaults.
+
+# Default decision for commands not covered by any rule: allow | deny | ask
+defaultDecision: ask
+
+# If true, commands containing $() or backticks trigger "ask"
+askOnSubshell: true
+
+# Additional commands to always allow (appended to built-in list)
+# alwaysAllow:
+#   - terraform
+#   - flyctl
+#   - my-safe-tool
+
+# Additional commands to always deny (appended to built-in list)
+# alwaysDeny:
+#   - nc
+#   - ncat
+
+# Additional global deny patterns (regex against full command string)
+# globalDeny:
+#   - pattern: 'curl.*evil\\.com'
+#     reason: 'Blocked domain'
+
+# Command-specific rules (override built-in rules by command name)
+# rules:
+#   - command: npx
+#     default: allow          # Trust all npx in this project
+#   - command: docker
+#     default: allow          # Trust docker in this project
+#   - command: ssh
+#     default: allow
+#     argPatterns:
+#       - match:
+#           anyArgMatches: ['^devserver$', '^staging$']
+#         decision: allow
+#         description: Known safe SSH targets

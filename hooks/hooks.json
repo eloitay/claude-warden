@@ -1,0 +1,17 @@
+{
+  "description": "Smart command safety filter — evaluates Bash commands against configurable safety rules",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node ${CLAUDE_PLUGIN_ROOT}/dist/index.cjs",
+            "timeout": 5
+          }
+        ]
+      }
+    ]
+  }
+}
