@@ -11,8 +11,10 @@ Claude Warden is a Claude Code plugin that provides smart command safety filteri
 - `pnpm run build` — Build with tsup (outputs `dist/index.cjs`)
 - `pnpm run test` — Run all tests with vitest
 - `pnpm run test -- src/__tests__/parser.test.ts` — Run a single test file
+- `pnpm run test:watch` — Vitest in watch mode
 - `pnpm run typecheck` — TypeScript type checking
 - `pnpm run dev` — Watch mode build
+- `pnpm run eval` — Run the built hook locally (reads hook JSON from stdin)
 
 ## Architecture
 
@@ -23,8 +25,16 @@ Claude Warden is a Claude Code plugin that provides smart command safety filteri
 - `src/parser.ts` — State-machine shell command splitter. Splits on `|`, `&&`, `||`, `;` while respecting quotes. Extracts env prefixes, normalizes command paths to basename. Recursively parses `sh -c`/`bash -c` arguments. Detects subshells and heredocs.
 - `src/evaluator.ts` — Decision engine. Hierarchy: global deny patterns → alwaysDeny → alwaysAllow → command-specific rules with argument pattern matching → default decision. For pipelines/chains, combines per-command results (any deny → deny, any ask → ask, all allow → allow).
 - `src/defaults.ts` — Built-in rules for ~100 common dev commands. Three tiers: always-allow (cat, ls, grep...), always-deny (sudo, shutdown...), conditional (node, npx, git, docker... with argument-aware patterns).
-- `src/rules.ts` — Loads and merges config from `~/.claude/warden.yaml` (user) and `.claude/warden.yaml` (project). User rules override defaults by command name.
+- `src/rules.ts` — Loads and merges config from `~/.claude/warden.yaml` (user) and `.claude/warden.yaml` (project). User rules override defaults by command name. Config also supports `trustedSSHHosts`, `trustedDockerContainers`, `trustedKubectlContexts`, and `trustedSprites` for context-aware filtering.
 - `src/types.ts` — All TypeScript interfaces.
+
+## Hook Protocol
+
+The hook communicates with Claude Code via the PreToolUse hook protocol:
+- **Input**: JSON on stdin with `tool_name`, `tool_input.command`, `cwd`, etc.
+- **Allow**: stdout JSON with `permissionDecision: "allow"`
+- **Ask**: stdout JSON with `permissionDecision: "ask"` (falls through to user prompt)
+- **Deny**: exit code 2 with reason on stderr
 
 ## Plugin Structure
 
