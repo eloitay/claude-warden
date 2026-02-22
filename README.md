@@ -19,7 +19,7 @@ This AST-based approach enables:
 - **Recursive evaluation of remote commands**: `ssh devserver 'cat /etc/hosts'` → Warden extracts the remote command, parses it through the same pipeline, and allows it. `ssh devserver 'sudo rm -rf /'` → denied. Same for `docker exec`, `kubectl exec`, and `sprite exec`.
 - **Shell wrapper unwrapping**: `sh -c "npm run build && npm test"` → the inner command is extracted and recursively parsed/evaluated, not treated as an opaque string.
 - **Env prefix handling**: `NODE_ENV=production npm run build` → correctly evaluates `npm run build`, ignoring the env prefix.
-- **Subshell detection**: Commands with `$()` or backticks are flagged for prompting, since their actual content can't be statically evaluated.
+- **Recursive subshell evaluation**: Commands with `$()` or backticks are extracted, parsed, and recursively evaluated through the same pipeline. `echo $(cat file.txt)` → both `echo` and `cat` are evaluated individually. Only unparseable constructs (heredocs, complex shell syntax) fall back to prompting when `askOnSubshell` is enabled.
 
 The result: **100+ common dev commands auto-approved**, dangerous commands auto-denied, everything else configurable — with zero changes to how you use Claude Code.
 
