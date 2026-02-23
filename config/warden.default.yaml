@@ -1,7 +1,11 @@
 # Claude Warden - Default Configuration Reference
 #
-# Copy to ~/.claude/warden.yaml or .claude/warden.yaml (project-level) to customize.
-# Project-level config overrides user-level config, which overrides defaults.
+# Copy to ~/.claude/warden.yaml (user-level) or .claude/warden.yaml (project-level) to customize.
+#
+# Config priority: project > user > built-in defaults.
+# Within each scope, alwaysDeny is checked before alwaysAllow, and the first
+# scope with a matching rule wins (e.g. a project rule overrides a user rule
+# for the same command).
 
 # Default decision for commands not covered by any rule: allow | deny | ask
 defaultDecision: ask
@@ -9,21 +13,16 @@ defaultDecision: ask
 # If true, commands containing $() or backticks trigger "ask"
 askOnSubshell: true
 
-# Additional commands to always allow (appended to built-in list)
+# Additional commands to always allow (checked after alwaysDeny within this scope)
 # alwaysAllow:
 #   - terraform
 #   - flyctl
 #   - my-safe-tool
 
-# Additional commands to always deny (appended to built-in list)
+# Additional commands to always deny (checked first within this scope)
 # alwaysDeny:
 #   - nc
 #   - ncat
-
-# Additional global deny patterns (regex against full command string)
-# globalDeny:
-#   - pattern: 'curl.*evil\\.com'
-#     reason: 'Blocked domain'
 
 # Trusted SSH hosts — ssh/scp/rsync to these hosts are auto-allowed.
 # Remote commands on trusted hosts are recursively evaluated through warden rules.
@@ -52,16 +51,15 @@ askOnSubshell: true
 #   - my-sprite
 #   - dev-*
 
-# Command-specific rules (override built-in rules by command name)
+# Command-specific rules (override built-in rules by command name).
+# The first scope (project > user > default) with a rule for a given command wins.
 # rules:
 #   - command: npx
 #     default: allow          # Trust all npx in this project
 #   - command: docker
-#     default: allow          # Trust docker in this project
-#   - command: ssh
-#     default: allow
+#     default: ask
 #     argPatterns:
 #       - match:
-#           anyArgMatches: ['^devserver$', '^staging$']
+#           anyArgMatches: ['^(ps|images|logs)$']
 #         decision: allow
-#         description: Known safe SSH targets
+#         description: Read-only docker commands

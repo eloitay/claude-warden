@@ -62,24 +62,17 @@ export function evaluate(parsed: ParseResult, config: WardenConfig): EvalResult 
 function evaluateCommand(cmd: ParsedCommand, config: WardenConfig): CommandEvalDetail {
   const { command, args } = cmd;
 
-  // 1. Global deny patterns (regex on raw command)
-  for (const gp of config.globalDeny || []) {
-    if (new RegExp(gp.pattern).test(cmd.raw)) {
-      return { command, args, decision: 'deny', reason: gp.reason, matchedRule: 'globalDeny' };
+  // 1. Scoped alwaysDeny → alwaysAllow per layer (workspace > user > default)
+  for (const layer of config.layers) {
+    if (layer.alwaysDeny.includes(command)) {
+      return { command, args, decision: 'deny', reason: `"${command}" is blocked`, matchedRule: 'alwaysDeny' };
+    }
+    if (layer.alwaysAllow.includes(command)) {
+      return { command, args, decision: 'allow', reason: `"${command}" is safe`, matchedRule: 'alwaysAllow' };
     }
   }
 
-  // 2. Always deny
-  if (config.alwaysDeny?.includes(command)) {
-    return { command, args, decision: 'deny', reason: `"${command}" is blocked`, matchedRule: 'alwaysDeny' };
-  }
-
-  // 3. Always allow
-  if (config.alwaysAllow?.includes(command)) {
-    return { command, args, decision: 'allow', reason: `"${command}" is safe`, matchedRule: 'alwaysAllow' };
-  }
-
-  // 4. Remote target whitelisting with recursive command evaluation
+  // 2. Remote target whitelisting with recursive command evaluation
   if ((command === 'ssh' || command === 'scp' || command === 'rsync') && config.trustedSSHHosts?.length) {
     const sshResult = evaluateSSHCommand(cmd, config);
     if (sshResult) return sshResult;
@@ -97,13 +90,15 @@ function evaluateCommand(cmd: ParsedCommand, config: WardenConfig): CommandEvalD
     if (spriteResult) return spriteResult;
   }
 
-  // 5. Command-specific rules
-  const rule = config.rules.find(r => r.command === command);
-  if (rule) {
-    return evaluateRule(cmd, rule);
+  // 3. Scoped command rules (first layer with a matching rule wins)
+  for (const layer of config.layers) {
+    const rule = layer.rules.find(r => r.command === command);
+    if (rule) {
+      return evaluateRule(cmd, rule);
+    }
   }
 
-  // 6. Default
+  // 4. Default
   return { command, args, decision: config.defaultDecision, reason: `No rule for "${command}"`, matchedRule: 'default' };
 }
 
@@ -171,7 +166,6 @@ function globToRegex(pattern: string): RegExp {
       regex += '.';
     } else if (ch === '[') {
       // Pass through character class until closing ]
-      const start = i;
       i++;
       // Handle negation [!...] → [^...]
       if (i < pattern.length && pattern[i] === '!') {

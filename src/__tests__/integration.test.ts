@@ -135,7 +135,7 @@ describe('integration: realistic commands', () => {
       expect(warden('sudo rm -rf /').decision).toBe('deny');
     });
 
-    it('rm -rf / → deny (global pattern)', () => {
+    it('rm -rf / → deny (argPattern)', () => {
       expect(warden('rm -rf /').decision).toBe('deny');
     });
 

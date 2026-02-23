@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { evaluate } from '../evaluator';
 import { parseCommand } from '../parser';
 import { DEFAULT_CONFIG } from '../defaults';
-import type { WardenConfig } from '../types';
+import type { WardenConfig, ConfigLayer } from '../types';
 
 function eval_(cmd: string) {
   return evaluate(parseCommand(cmd), DEFAULT_CONFIG);
@@ -54,7 +54,7 @@ describe('evaluator', () => {
     });
   });
 
-  describe('global deny patterns', () => {
+  describe('dangerous arg patterns', () => {
     it('denies rm -rf', () => {
       expect(eval_('rm -rf /').decision).toBe('deny');
     });
@@ -215,6 +215,71 @@ describe('evaluator', () => {
     it('handles command with path', () => {
       // /usr/bin/node --version → node --version → allow
       expect(eval_('/usr/bin/node --version').decision).toBe('allow');
+    });
+  });
+
+  describe('scoped layer priority', () => {
+    it('user alwaysAllow overrides default alwaysDeny', () => {
+      const userLayer: ConfigLayer = { alwaysAllow: ['sudo'], alwaysDeny: [], rules: [] };
+      const config: WardenConfig = {
+        ...structuredClone(DEFAULT_CONFIG),
+        layers: [userLayer, DEFAULT_CONFIG.layers[0]],
+      };
+      expect(evaluate(parseCommand('sudo apt install'), config).decision).toBe('allow');
+    });
+
+    it('workspace alwaysDeny overrides user alwaysAllow', () => {
+      const userLayer: ConfigLayer = { alwaysAllow: ['curl'], alwaysDeny: [], rules: [] };
+      const workspaceLayer: ConfigLayer = { alwaysAllow: [], alwaysDeny: ['curl'], rules: [] };
+      const config: WardenConfig = {
+        ...structuredClone(DEFAULT_CONFIG),
+        layers: [workspaceLayer, userLayer, DEFAULT_CONFIG.layers[0]],
+      };
+      expect(evaluate(parseCommand('curl https://example.com'), config).decision).toBe('deny');
+    });
+
+    it('workspace rule overrides default rule for same command', () => {
+      const workspaceLayer: ConfigLayer = {
+        alwaysAllow: [],
+        alwaysDeny: [],
+        rules: [{ command: 'npm', default: 'deny' }],
+      };
+      const config: WardenConfig = {
+        ...structuredClone(DEFAULT_CONFIG),
+        layers: [workspaceLayer, DEFAULT_CONFIG.layers[0]],
+      };
+      expect(evaluate(parseCommand('npm install'), config).decision).toBe('deny');
+    });
+
+    it('user rule overrides default rule', () => {
+      const userLayer: ConfigLayer = {
+        alwaysAllow: [],
+        alwaysDeny: [],
+        rules: [{ command: 'docker', default: 'allow' }],
+      };
+      const config: WardenConfig = {
+        ...structuredClone(DEFAULT_CONFIG),
+        layers: [userLayer, DEFAULT_CONFIG.layers[0]],
+      };
+      expect(evaluate(parseCommand('docker run ubuntu'), config).decision).toBe('allow');
+    });
+
+    it('first layer with matching rule wins (workspace over user)', () => {
+      const userLayer: ConfigLayer = {
+        alwaysAllow: [],
+        alwaysDeny: [],
+        rules: [{ command: 'npm', default: 'allow' }],
+      };
+      const workspaceLayer: ConfigLayer = {
+        alwaysAllow: [],
+        alwaysDeny: [],
+        rules: [{ command: 'npm', default: 'ask' }],
+      };
+      const config: WardenConfig = {
+        ...structuredClone(DEFAULT_CONFIG),
+        layers: [workspaceLayer, userLayer, DEFAULT_CONFIG.layers[0]],
+      };
+      expect(evaluate(parseCommand('npm install'), config).decision).toBe('ask');
     });
   });
 

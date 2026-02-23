@@ -1,6 +1,7 @@
 import { parseCommand } from './parser';
 import { evaluate } from './evaluator';
 import { loadConfig } from './rules';
+import { formatSystemMessage } from './suggest';
 import type { HookInput, HookOutput } from './types';
 
 async function main() {
@@ -43,12 +44,17 @@ async function main() {
   }
 
   if (result.decision === 'deny') {
+    const msg = formatSystemMessage('deny', command, result.details);
+    const output: HookOutput = { systemMessage: msg };
+    process.stdout.write(JSON.stringify(output));
     process.stderr.write(`[warden] Blocked: ${result.reason}\n`);
     process.exit(2);
   }
 
-  // decision === 'ask' — fall through to normal permission prompt
-  // Return nothing, exit 0 — this means "no opinion", user gets prompted as usual
+  // decision === 'ask' — provide feedback via systemMessage
+  const msg = formatSystemMessage('ask', command, result.details);
+  const output: HookOutput = { systemMessage: msg };
+  process.stdout.write(JSON.stringify(output));
   process.exit(0);
 }
 

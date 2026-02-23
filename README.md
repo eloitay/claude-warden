@@ -20,6 +20,7 @@ This AST-based approach enables:
 - **Shell wrapper unwrapping**: `sh -c "npm run build && npm test"` → the inner command is extracted and recursively parsed/evaluated, not treated as an opaque string.
 - **Env prefix handling**: `NODE_ENV=production npm run build` → correctly evaluates `npm run build`, ignoring the env prefix.
 - **Recursive subshell evaluation**: Commands with `$()` or backticks are extracted, parsed, and recursively evaluated through the same pipeline. `echo $(cat file.txt)` → both `echo` and `cat` are evaluated individually. Only unparseable constructs (heredocs, complex shell syntax) fall back to prompting when `askOnSubshell` is enabled.
+- **Feedback on blocked commands**: When a command is blocked or flagged, Warden provides a system message explaining why and a YAML snippet showing how to allow it in your config.
 
 The result: **100+ common dev commands auto-approved**, dangerous commands auto-denied, everything else configurable — with zero changes to how you use Claude Code.
 
@@ -70,6 +71,21 @@ Warden works out of the box with sensible defaults. To customize, create a confi
 
 Copy [config/warden.default.yaml](config/warden.default.yaml) as a starting point.
 
+### Config priority (scoped layers)
+
+Config is evaluated in layers with **project > user > default** priority:
+
+1. **Project-level** (`.claude/warden.yaml`) — highest priority
+2. **User-level** (`~/.claude/warden.yaml`)
+3. **Built-in defaults**
+
+Within each layer, `alwaysDeny` is checked before `alwaysAllow`. The first layer with a matching entry wins. For command-specific rules, the first layer that defines a rule for a given command wins.
+
+This means:
+- A project `alwaysDeny` for `curl` overrides a user `alwaysAllow` for `curl`
+- A user `alwaysAllow` for `sudo` overrides the default `alwaysDeny` for `sudo`
+- A project rule for `npm` overrides the default rule for `npm`
+
 ### Config options
 
 ```yaml
@@ -79,17 +95,12 @@ defaultDecision: ask
 # Trigger "ask" for commands with $() or backticks
 askOnSubshell: true
 
-# Add commands to always allow/deny
+# Add commands to always allow/deny (scoped to this config level)
 alwaysAllow:
   - terraform
   - flyctl
 alwaysDeny:
   - nc
-
-# Block patterns (regex against full command string)
-globalDeny:
-  - pattern: 'curl.*evil\.com'
-    reason: 'Blocked domain'
 
 # Trusted remote targets (auto-allow connection, evaluate remote commands)
 trustedSSHHosts:
@@ -103,7 +114,7 @@ trustedKubectlContexts:
 trustedSprites:
   - my-sprite
 
-# Per-command rules (override built-in defaults)
+# Per-command rules (override built-in defaults for this scope)
 rules:
   - command: npx
     default: allow
@@ -116,9 +127,14 @@ rules:
         description: Read-only docker commands
 ```
 
-### Config priority
+## Feedback and `/warden-allow`
 
-Project `.claude/warden.yaml` > User `~/.claude/warden.yaml` > Built-in defaults
+When Warden blocks or flags a command, it includes a system message explaining:
+
+1. **Why** the command was blocked/flagged (per-command reasons)
+2. **How to allow it** — a ready-to-use YAML snippet for your config
+
+Use the `/warden-allow` slash command to apply the suggested config change. It will ask which scope (project or user) to use.
 
 ## Built-in defaults
 
@@ -128,14 +144,11 @@ File readers (`cat`, `head`, `tail`, `less`), search tools (`grep`, `rg`, `find`
 ### Always denied
 `sudo`, `su`, `mkfs`, `fdisk`, `dd`, `shutdown`, `reboot`, `iptables`, `crontab`, `systemctl`, `launchctl`
 
-### Global deny patterns
-- `rm -rf` (recursive force delete)
-- Direct writes to block devices
-- `chmod -R 777`
-- Fork bombs
-
 ### Conditional rules
-Commands like `node`, `npx`, `docker`, `ssh`, `git push --force`, `rm` have argument-aware rules. For example, `git` is allowed but `git push --force` triggers a prompt.
+Commands like `node`, `npx`, `docker`, `ssh`, `git push --force`, `rm`, `chmod` have argument-aware rules. For example:
+- `git` is allowed but `git push --force` triggers a prompt
+- `rm temp.txt` is allowed but `rm -rf /` is denied
+- `chmod 644 file` prompts but `chmod -R 777 /var` is denied
 
 ### Trusted remote targets
 Configure trusted hosts/containers/contexts to auto-allow connections and recursively evaluate remote commands:
@@ -151,9 +164,9 @@ All support glob patterns: `*`, `?`, `[...]`, `[!...]`, `{a,b,c}`
 1. Claude Code calls the `PreToolUse` hook before every Bash command
 2. Warden parses the command into an AST via [bash-parser](https://github.com/vorpaljs/bash-parser), walking the tree to extract individual commands from pipes, chains, logical expressions, and subshells
 3. Shell wrappers (`sh -c`, `bash -c`) and remote commands (`ssh`, `docker exec`, `kubectl exec`, `sprite exec`) are recursively parsed and evaluated
-4. Each command is evaluated through the rule hierarchy: global deny patterns → alwaysDeny → alwaysAllow → trusted remote targets → command-specific rules with argument matching → default decision
+4. Each command is evaluated through the rule hierarchy: alwaysDeny → alwaysAllow → trusted remote targets → command-specific rules with argument matching → default decision (checked per layer in priority order)
 5. Results are combined: any deny → deny whole pipeline, any ask → ask, all allow → allow
-6. Returns the decision via stdout JSON (allow/ask) or exit code 2 (deny)
+6. Returns the decision via stdout JSON (allow/ask) or exit code 2 (deny), with a system message explaining the reasoning for deny/ask decisions
 
 ## Development
 

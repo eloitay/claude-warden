@@ -18335,16 +18335,13 @@ function evaluate(parsed, config) {
 }
 function evaluateCommand(cmd, config) {
   const { command, args: args2 } = cmd;
-  for (const gp of config.globalDeny || []) {
-    if (new RegExp(gp.pattern).test(cmd.raw)) {
-      return { command, args: args2, decision: "deny", reason: gp.reason, matchedRule: "globalDeny" };
+  for (const layer of config.layers) {
+    if (layer.alwaysDeny.includes(command)) {
+      return { command, args: args2, decision: "deny", reason: `"${command}" is blocked`, matchedRule: "alwaysDeny" };
     }
-  }
-  if (config.alwaysDeny?.includes(command)) {
-    return { command, args: args2, decision: "deny", reason: `"${command}" is blocked`, matchedRule: "alwaysDeny" };
-  }
-  if (config.alwaysAllow?.includes(command)) {
-    return { command, args: args2, decision: "allow", reason: `"${command}" is safe`, matchedRule: "alwaysAllow" };
+    if (layer.alwaysAllow.includes(command)) {
+      return { command, args: args2, decision: "allow", reason: `"${command}" is safe`, matchedRule: "alwaysAllow" };
+    }
   }
   if ((command === "ssh" || command === "scp" || command === "rsync") && config.trustedSSHHosts?.length) {
     const sshResult = evaluateSSHCommand(cmd, config);
@@ -18362,9 +18359,11 @@ function evaluateCommand(cmd, config) {
     const spriteResult = evaluateSpriteExec(cmd, config);
     if (spriteResult) return spriteResult;
   }
-  const rule = config.rules.find((r) => r.command === command);
-  if (rule) {
-    return evaluateRule(cmd, rule);
+  for (const layer of config.layers) {
+    const rule = layer.rules.find((r) => r.command === command);
+    if (rule) {
+      return evaluateRule(cmd, rule);
+    }
   }
   return { command, args: args2, decision: config.defaultDecision, reason: `No rule for "${command}"`, matchedRule: "default" };
 }
@@ -18438,7 +18437,6 @@ function globToRegex(pattern) {
     } else if (ch === "?") {
       regex += ".";
     } else if (ch === "[") {
-      const start = i;
       i++;
       if (i < pattern.length && pattern[i] === "!") {
         regex += "[^";
@@ -18793,324 +18791,327 @@ var DEFAULT_CONFIG = {
   trustedDockerContainers: [],
   trustedKubectlContexts: [],
   trustedSprites: [],
-  alwaysAllow: [
-    // Read-only file operations
-    "cat",
-    "head",
-    "tail",
-    "less",
-    "more",
-    "wc",
-    "sort",
-    "uniq",
-    "tee",
-    "diff",
-    "comm",
-    "cut",
-    "paste",
-    "tr",
-    "fold",
-    "expand",
-    "unexpand",
-    "column",
-    "rev",
-    "tac",
-    "nl",
-    "od",
-    "xxd",
-    "file",
-    "stat",
-    // Search/find
-    "grep",
-    "egrep",
-    "fgrep",
-    "rg",
-    "ag",
-    "ack",
-    "find",
-    "fd",
-    "fzf",
-    "locate",
-    "which",
-    "whereis",
-    "type",
-    "command",
-    // Directory listing
-    "ls",
-    "dir",
-    "tree",
-    "exa",
-    "eza",
-    "lsd",
-    // Path/string utilities
-    "basename",
-    "dirname",
-    "realpath",
-    "readlink",
-    "echo",
-    "printf",
-    "true",
-    "false",
-    "test",
-    "[",
-    // Date/time
-    "date",
-    "cal",
-    // Environment info
-    "env",
-    "printenv",
-    "uname",
-    "hostname",
-    "whoami",
-    "id",
-    "pwd",
-    // Process viewing (read-only)
-    "ps",
-    "top",
-    "htop",
-    "uptime",
-    "free",
-    "df",
-    "du",
-    "lsof",
-    // Text processing
-    "sed",
-    "awk",
-    "jq",
-    "yq",
-    "xargs",
-    "seq",
-    // Pagers and formatters
-    "bat",
-    "pygmentize",
-    "highlight",
-    // Version managers (read-only)
-    "nvm",
-    "fnm",
-    "rbenv",
-    "pyenv",
-    // Misc safe
-    "cd",
-    "pushd",
-    "popd",
-    "dirs",
-    "hash",
-    "alias",
-    "sleep",
-    "wait",
-    "time",
-    "md5",
-    "md5sum",
-    "sha256sum",
-    "shasum",
-    "cksum",
-    "base64",
-    "openssl"
-  ],
-  alwaysDeny: [
-    "sudo",
-    "su",
-    "doas",
-    "mkfs",
-    "fdisk",
-    "dd",
-    "shutdown",
-    "reboot",
-    "halt",
-    "poweroff",
-    "iptables",
-    "ip6tables",
-    "nft",
-    "useradd",
-    "userdel",
-    "usermod",
-    "groupadd",
-    "groupdel",
-    "crontab",
-    "systemctl",
-    "service",
-    "launchctl"
-  ],
-  globalDeny: [
-    { pattern: "rm\\s+-[^\\s]*r[^\\s]*f|rm\\s+-[^\\s]*f[^\\s]*r", reason: "Recursive force delete" },
-    { pattern: ">\\/dev\\/sd|>\\/dev\\/nvme|>\\/dev\\/hd", reason: "Direct write to block device" },
-    { pattern: "chmod\\s+-R\\s+777", reason: "Recursively setting world-writable permissions" },
-    { pattern: ":\\(\\)\\s*\\{", reason: "Fork bomb pattern detected" }
-  ],
-  rules: [
-    // --- Node.js ecosystem ---
-    {
-      command: "node",
-      default: "ask",
-      argPatterns: [
-        { match: { anyArgMatches: ["^-e$", "^--eval", "^-p$", "^--print"] }, decision: "ask", reason: "Evaluating inline code" },
-        { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" },
-        { match: { noArgs: true }, decision: "ask", reason: "Interactive REPL" }
-      ]
-    },
-    {
-      command: "npx",
-      default: "ask",
-      argPatterns: [
-        {
-          match: { anyArgMatches: ["^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|rimraf|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$"] },
-          decision: "allow",
-          description: "Well-known dev tools"
-        },
-        { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" }
-      ]
-    },
-    {
-      command: "bunx",
-      default: "ask",
-      argPatterns: [
-        {
-          match: { anyArgMatches: ["^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|rimraf|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$"] },
-          decision: "allow",
-          description: "Well-known dev tools"
-        },
-        { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" }
-      ]
-    },
-    {
-      command: "npm",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(publish|unpublish|deprecate|owner|access|token|adduser|login)$"] }, decision: "ask", reason: "Registry modification" }
-      ]
-    },
-    {
-      command: "pnpm",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(publish|unpublish|deprecate|owner|access|token|adduser|login)$"] }, decision: "ask", reason: "Registry modification" }
-      ]
-    },
-    {
-      command: "yarn",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(publish|unpublish|owner|access|token|login|logout)$"] }, decision: "ask", reason: "Registry modification" }
-      ]
-    },
-    {
-      command: "bun",
-      default: "ask",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(install|add|remove|run|test|build|init|create|pm|x|upgrade|link|unlink)$"] }, decision: "allow", description: "Standard bun commands" },
-        { match: { anyArgMatches: ["^--(version|help)$"] }, decision: "allow" }
-      ]
-    },
-    // --- Python ---
-    {
-      command: "python",
-      default: "ask",
-      argPatterns: [
-        { match: { anyArgMatches: ["^--(version|help)$", "^-V$"] }, decision: "allow" }
-      ]
-    },
-    {
-      command: "python3",
-      default: "ask",
-      argPatterns: [
-        { match: { anyArgMatches: ["^--(version|help)$", "^-V$"] }, decision: "allow" }
-      ]
-    },
-    { command: "pip", default: "allow" },
-    { command: "pip3", default: "allow" },
-    {
-      command: "uv",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^publish$"] }, decision: "ask", reason: "Publishing to PyPI" }
-      ]
-    },
-    { command: "pipx", default: "ask" },
-    // --- Git ---
-    {
-      command: "git",
-      default: "allow",
-      argPatterns: [
-        { match: { argsMatch: ["push\\s+--force", "push\\s+-f\\b"] }, decision: "ask", reason: "Force push can overwrite remote history" },
-        { match: { argsMatch: ["reset\\s+--hard"] }, decision: "ask", reason: "Hard reset discards changes" },
-        { match: { anyArgMatches: ["^clean$"] }, decision: "ask", reason: "git clean removes untracked files" }
-      ]
-    },
-    {
-      command: "gh",
-      default: "allow",
-      argPatterns: [
-        { match: { argsMatch: ["repo\\s+delete", "repo\\s+archive"] }, decision: "ask", reason: "Destructive repo operation" }
-      ]
-    },
-    // --- Build tools ---
-    { command: "make", default: "allow" },
-    { command: "cmake", default: "allow" },
-    {
-      command: "cargo",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(publish|login|logout|owner|yank)$"] }, decision: "ask", reason: "Registry modification" }
-      ]
-    },
-    {
-      command: "go",
-      default: "allow",
-      argPatterns: [
-        { match: { anyArgMatches: ["^generate$"] }, decision: "ask", reason: "go generate runs arbitrary commands" }
-      ]
-    },
-    { command: "rustup", default: "allow" },
-    { command: "tsc", default: "allow" },
-    { command: "turbo", default: "allow" },
-    { command: "nx", default: "allow" },
-    { command: "lerna", default: "allow" },
-    // --- Docker ---
-    {
-      command: "docker",
-      default: "ask",
-      argPatterns: [
-        { match: { anyArgMatches: ["^(ps|images|logs|inspect|stats|top|version|info)$"] }, decision: "allow", description: "Read-only docker commands" },
-        { match: { anyArgMatches: ["^(build|run|compose|exec|pull|stop|start|restart|create)$"] }, decision: "ask", reason: "Docker state-changing operation" },
-        { match: { anyArgMatches: ["^(system\\s+prune|container\\s+prune|image\\s+prune)$"] }, decision: "ask", reason: "Docker prune operations" }
-      ]
-    },
-    { command: "docker-compose", default: "ask" },
-    { command: "kubectl", default: "ask" },
-    // --- File operations ---
-    {
-      command: "rm",
-      default: "ask",
-      argPatterns: [
-        { match: { argsMatch: ["-[^\\s]*r"] }, decision: "ask", reason: "Recursive delete" },
-        { match: { argCount: { max: 3 }, not: false }, decision: "allow", description: "Deleting a small number of non-recursive files" }
-      ]
-    },
-    { command: "mkdir", default: "allow" },
-    { command: "touch", default: "allow" },
-    { command: "cp", default: "allow" },
-    { command: "mv", default: "allow" },
-    { command: "ln", default: "allow" },
-    { command: "chmod", default: "ask" },
-    { command: "chown", default: "ask" },
-    // --- Network ---
-    { command: "curl", default: "allow" },
-    { command: "wget", default: "allow" },
-    { command: "ssh", default: "ask" },
-    { command: "scp", default: "ask" },
-    { command: "rsync", default: "ask" },
-    // --- Package managers ---
-    { command: "brew", default: "allow" },
-    { command: "apt", default: "ask" },
-    { command: "apt-get", default: "ask" },
-    { command: "yum", default: "ask" },
-    { command: "dnf", default: "ask" },
-    { command: "pacman", default: "ask" },
-    // --- Terraform / IaC ---
-    { command: "terraform", default: "ask", argPatterns: [
-      { match: { anyArgMatches: ["^(plan|validate|fmt|show|state|output|providers|version|graph|console)$"] }, decision: "allow", description: "Read-only terraform commands" }
-    ] }
-  ]
+  layers: [{
+    alwaysAllow: [
+      // Read-only file operations
+      "cat",
+      "head",
+      "tail",
+      "less",
+      "more",
+      "wc",
+      "sort",
+      "uniq",
+      "tee",
+      "diff",
+      "comm",
+      "cut",
+      "paste",
+      "tr",
+      "fold",
+      "expand",
+      "unexpand",
+      "column",
+      "rev",
+      "tac",
+      "nl",
+      "od",
+      "xxd",
+      "file",
+      "stat",
+      // Search/find
+      "grep",
+      "egrep",
+      "fgrep",
+      "rg",
+      "ag",
+      "ack",
+      "find",
+      "fd",
+      "fzf",
+      "locate",
+      "which",
+      "whereis",
+      "type",
+      "command",
+      // Directory listing
+      "ls",
+      "dir",
+      "tree",
+      "exa",
+      "eza",
+      "lsd",
+      // Path/string utilities
+      "basename",
+      "dirname",
+      "realpath",
+      "readlink",
+      "echo",
+      "printf",
+      "true",
+      "false",
+      "test",
+      "[",
+      // Date/time
+      "date",
+      "cal",
+      // Environment info
+      "env",
+      "printenv",
+      "uname",
+      "hostname",
+      "whoami",
+      "id",
+      "pwd",
+      // Process viewing (read-only)
+      "ps",
+      "top",
+      "htop",
+      "uptime",
+      "free",
+      "df",
+      "du",
+      "lsof",
+      // Text processing
+      "sed",
+      "awk",
+      "jq",
+      "yq",
+      "xargs",
+      "seq",
+      // Pagers and formatters
+      "bat",
+      "pygmentize",
+      "highlight",
+      // Version managers (read-only)
+      "nvm",
+      "fnm",
+      "rbenv",
+      "pyenv",
+      // Misc safe
+      "cd",
+      "pushd",
+      "popd",
+      "dirs",
+      "hash",
+      "alias",
+      "sleep",
+      "wait",
+      "time",
+      "md5",
+      "md5sum",
+      "sha256sum",
+      "shasum",
+      "cksum",
+      "base64",
+      "openssl"
+    ],
+    alwaysDeny: [
+      "sudo",
+      "su",
+      "doas",
+      "mkfs",
+      "fdisk",
+      "dd",
+      "shutdown",
+      "reboot",
+      "halt",
+      "poweroff",
+      "iptables",
+      "ip6tables",
+      "nft",
+      "useradd",
+      "userdel",
+      "usermod",
+      "groupadd",
+      "groupdel",
+      "crontab",
+      "systemctl",
+      "service",
+      "launchctl"
+    ],
+    rules: [
+      // --- Node.js ecosystem ---
+      {
+        command: "node",
+        default: "ask",
+        argPatterns: [
+          { match: { anyArgMatches: ["^-e$", "^--eval", "^-p$", "^--print"] }, decision: "ask", reason: "Evaluating inline code" },
+          { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" },
+          { match: { noArgs: true }, decision: "ask", reason: "Interactive REPL" }
+        ]
+      },
+      {
+        command: "npx",
+        default: "ask",
+        argPatterns: [
+          {
+            match: { anyArgMatches: ["^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$"] },
+            decision: "allow",
+            description: "Well-known dev tools"
+          },
+          { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" }
+        ]
+      },
+      {
+        command: "bunx",
+        default: "ask",
+        argPatterns: [
+          {
+            match: { anyArgMatches: ["^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$"] },
+            decision: "allow",
+            description: "Well-known dev tools"
+          },
+          { match: { anyArgMatches: ["^--(version|help)$", "^-[vh]$"] }, decision: "allow", description: "Version/help flags" }
+        ]
+      },
+      {
+        command: "npm",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(publish|unpublish|deprecate|owner|access|token|adduser|login)$"] }, decision: "ask", reason: "Registry modification" }
+        ]
+      },
+      {
+        command: "pnpm",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(publish|unpublish|deprecate|owner|access|token|adduser|login)$"] }, decision: "ask", reason: "Registry modification" }
+        ]
+      },
+      {
+        command: "yarn",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(publish|unpublish|owner|access|token|login|logout)$"] }, decision: "ask", reason: "Registry modification" }
+        ]
+      },
+      {
+        command: "bun",
+        default: "ask",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(install|add|remove|run|test|build|init|create|pm|x|upgrade|link|unlink)$"] }, decision: "allow", description: "Standard bun commands" },
+          { match: { anyArgMatches: ["^--(version|help)$"] }, decision: "allow" }
+        ]
+      },
+      // --- Python ---
+      {
+        command: "python",
+        default: "ask",
+        argPatterns: [
+          { match: { anyArgMatches: ["^--(version|help)$", "^-V$"] }, decision: "allow" }
+        ]
+      },
+      {
+        command: "python3",
+        default: "ask",
+        argPatterns: [
+          { match: { anyArgMatches: ["^--(version|help)$", "^-V$"] }, decision: "allow" }
+        ]
+      },
+      { command: "pip", default: "allow" },
+      { command: "pip3", default: "allow" },
+      {
+        command: "uv",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^publish$"] }, decision: "ask", reason: "Publishing to PyPI" }
+        ]
+      },
+      { command: "pipx", default: "ask" },
+      // --- Git ---
+      {
+        command: "git",
+        default: "allow",
+        argPatterns: [
+          { match: { argsMatch: ["push\\s+--force", "push\\s+-f\\b"] }, decision: "ask", reason: "Force push can overwrite remote history" },
+          { match: { argsMatch: ["reset\\s+--hard"] }, decision: "ask", reason: "Hard reset discards changes" },
+          { match: { anyArgMatches: ["^clean$"] }, decision: "ask", reason: "git clean removes untracked files" }
+        ]
+      },
+      {
+        command: "gh",
+        default: "allow",
+        argPatterns: [
+          { match: { argsMatch: ["repo\\s+delete", "repo\\s+archive"] }, decision: "ask", reason: "Destructive repo operation" }
+        ]
+      },
+      // --- Build tools ---
+      { command: "make", default: "allow" },
+      { command: "cmake", default: "allow" },
+      {
+        command: "cargo",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(publish|login|logout|owner|yank)$"] }, decision: "ask", reason: "Registry modification" }
+        ]
+      },
+      {
+        command: "go",
+        default: "allow",
+        argPatterns: [
+          { match: { anyArgMatches: ["^generate$"] }, decision: "ask", reason: "go generate runs arbitrary commands" }
+        ]
+      },
+      { command: "rustup", default: "allow" },
+      { command: "tsc", default: "allow" },
+      { command: "turbo", default: "allow" },
+      { command: "nx", default: "allow" },
+      { command: "lerna", default: "allow" },
+      // --- Docker ---
+      {
+        command: "docker",
+        default: "ask",
+        argPatterns: [
+          { match: { anyArgMatches: ["^(ps|images|logs|inspect|stats|top|version|info)$"] }, decision: "allow", description: "Read-only docker commands" },
+          { match: { anyArgMatches: ["^(build|run|compose|exec|pull|stop|start|restart|create)$"] }, decision: "ask", reason: "Docker state-changing operation" },
+          { match: { anyArgMatches: ["^(system\\s+prune|container\\s+prune|image\\s+prune)$"] }, decision: "ask", reason: "Docker prune operations" }
+        ]
+      },
+      { command: "docker-compose", default: "ask" },
+      { command: "kubectl", default: "ask" },
+      // --- File operations ---
+      {
+        command: "rm",
+        default: "ask",
+        argPatterns: [
+          { match: { argsMatch: ["-[^\\s]*r[^\\s]*f|-[^\\s]*f[^\\s]*r"] }, decision: "deny", reason: "Recursive force delete (rm -rf)" },
+          { match: { argsMatch: ["-[^\\s]*r"] }, decision: "ask", reason: "Recursive delete" },
+          { match: { argCount: { max: 3 }, not: false }, decision: "allow", description: "Deleting a small number of non-recursive files" }
+        ]
+      },
+      { command: "mkdir", default: "allow" },
+      { command: "touch", default: "allow" },
+      { command: "cp", default: "allow" },
+      { command: "mv", default: "allow" },
+      { command: "ln", default: "allow" },
+      {
+        command: "chmod",
+        default: "ask",
+        argPatterns: [
+          { match: { argsMatch: ["-R\\s+777"] }, decision: "deny", reason: "Recursively setting world-writable permissions" }
+        ]
+      },
+      { command: "chown", default: "ask" },
+      // --- Network ---
+      { command: "curl", default: "allow" },
+      { command: "wget", default: "allow" },
+      { command: "ssh", default: "ask" },
+      { command: "scp", default: "ask" },
+      { command: "rsync", default: "ask" },
+      // --- Package managers ---
+      { command: "brew", default: "allow" },
+      { command: "apt", default: "ask" },
+      { command: "apt-get", default: "ask" },
+      { command: "yum", default: "ask" },
+      { command: "dnf", default: "ask" },
+      { command: "pacman", default: "ask" },
+      // --- Terraform / IaC ---
+      { command: "terraform", default: "ask", argPatterns: [
+        { match: { anyArgMatches: ["^(plan|validate|fmt|show|state|output|providers|version|graph|console)$"] }, decision: "allow", description: "Read-only terraform commands" }
+      ] }
+    ]
+  }]
 };
 
 // src/rules.ts
@@ -19124,67 +19125,135 @@ var PROJECT_CONFIG_NAMES = [
 ];
 function loadConfig(cwd) {
   const config = structuredClone(DEFAULT_CONFIG);
+  const defaultLayer = config.layers[0];
+  let userLayer = null;
+  let userRaw = null;
   for (const configPath of USER_CONFIG_PATHS) {
-    if (tryMergeConfigFile(config, configPath)) break;
-  }
-  if (cwd) {
-    for (const name of PROJECT_CONFIG_NAMES) {
-      if (tryMergeConfigFile(config, (0, import_path2.join)(cwd, name))) break;
+    const result = tryLoadFile(configPath);
+    if (result) {
+      userLayer = extractLayer(result);
+      userRaw = result;
+      break;
     }
   }
+  let workspaceLayer = null;
+  let workspaceRaw = null;
+  if (cwd) {
+    for (const name of PROJECT_CONFIG_NAMES) {
+      const result = tryLoadFile((0, import_path2.join)(cwd, name));
+      if (result) {
+        workspaceLayer = extractLayer(result);
+        workspaceRaw = result;
+        break;
+      }
+    }
+  }
+  config.layers = [
+    ...workspaceLayer ? [workspaceLayer] : [],
+    ...userLayer ? [userLayer] : [],
+    defaultLayer
+  ];
+  if (userRaw) mergeNonLayerFields(config, userRaw);
+  if (workspaceRaw) mergeNonLayerFields(config, workspaceRaw);
   return config;
 }
-function tryMergeConfigFile(config, filePath) {
-  if (!(0, import_fs.existsSync)(filePath)) return false;
+function tryLoadFile(filePath) {
+  if (!(0, import_fs.existsSync)(filePath)) return null;
   try {
     const raw = (0, import_fs.readFileSync)(filePath, "utf-8");
     const parsed = filePath.endsWith(".yaml") || filePath.endsWith(".yml") ? (0, import_yaml.parse)(raw) : JSON.parse(raw);
     if (parsed && typeof parsed === "object") {
-      mergeConfig(config, parsed);
-      return true;
+      return parsed;
     }
   } catch {
   }
-  return false;
+  return null;
 }
-function mergeConfig(base, override) {
-  if (override.alwaysAllow) {
-    base.alwaysAllow = [...base.alwaysAllow || [], ...override.alwaysAllow];
+function extractLayer(raw) {
+  return {
+    alwaysAllow: Array.isArray(raw.alwaysAllow) ? raw.alwaysAllow : [],
+    alwaysDeny: Array.isArray(raw.alwaysDeny) ? raw.alwaysDeny : [],
+    rules: Array.isArray(raw.rules) ? raw.rules : []
+  };
+}
+function mergeNonLayerFields(config, raw) {
+  if (Array.isArray(raw.trustedSSHHosts)) {
+    config.trustedSSHHosts = [...config.trustedSSHHosts || [], ...raw.trustedSSHHosts];
   }
-  if (override.alwaysDeny) {
-    base.alwaysDeny = [...base.alwaysDeny || [], ...override.alwaysDeny];
+  if (Array.isArray(raw.trustedDockerContainers)) {
+    config.trustedDockerContainers = [...config.trustedDockerContainers || [], ...raw.trustedDockerContainers];
   }
-  if (override.globalDeny) {
-    base.globalDeny = [...base.globalDeny || [], ...override.globalDeny];
+  if (Array.isArray(raw.trustedKubectlContexts)) {
+    config.trustedKubectlContexts = [...config.trustedKubectlContexts || [], ...raw.trustedKubectlContexts];
   }
-  if (override.trustedSSHHosts) {
-    base.trustedSSHHosts = [...base.trustedSSHHosts || [], ...override.trustedSSHHosts];
+  if (Array.isArray(raw.trustedSprites)) {
+    config.trustedSprites = [...config.trustedSprites || [], ...raw.trustedSprites];
   }
-  if (override.trustedDockerContainers) {
-    base.trustedDockerContainers = [...base.trustedDockerContainers || [], ...override.trustedDockerContainers];
+  if (typeof raw.defaultDecision === "string") {
+    config.defaultDecision = raw.defaultDecision;
   }
-  if (override.trustedKubectlContexts) {
-    base.trustedKubectlContexts = [...base.trustedKubectlContexts || [], ...override.trustedKubectlContexts];
+  if (typeof raw.askOnSubshell === "boolean") {
+    config.askOnSubshell = raw.askOnSubshell;
   }
-  if (override.trustedSprites) {
-    base.trustedSprites = [...base.trustedSprites || [], ...override.trustedSprites];
-  }
-  if (override.defaultDecision) {
-    base.defaultDecision = override.defaultDecision;
-  }
-  if (override.askOnSubshell !== void 0) {
-    base.askOnSubshell = override.askOnSubshell;
-  }
-  if (override.rules) {
-    for (const userRule of override.rules) {
-      const idx = base.rules.findIndex((r) => r.command === userRule.command);
-      if (idx >= 0) {
-        base.rules[idx] = userRule;
-      } else {
-        base.rules.push(userRule);
+}
+
+// src/suggest.ts
+function generateAllowSnippet(details) {
+  const lines = [];
+  const alwaysAllowCmds = [];
+  const ruleCmds = [];
+  for (const d of details) {
+    if (d.decision === "allow") continue;
+    if (d.matchedRule === "alwaysDeny" || d.matchedRule === "default") {
+      if (!alwaysAllowCmds.includes(d.command)) {
+        alwaysAllowCmds.push(d.command);
+      }
+    } else if (d.matchedRule?.endsWith(":default") || d.matchedRule?.endsWith(":argPattern")) {
+      if (!ruleCmds.includes(d.command)) {
+        ruleCmds.push(d.command);
       }
     }
   }
+  if (alwaysAllowCmds.length > 0) {
+    lines.push("alwaysAllow:");
+    for (const cmd of alwaysAllowCmds) {
+      lines.push(`  - "${cmd}"`);
+    }
+  }
+  if (ruleCmds.length > 0) {
+    lines.push("rules:");
+    for (const cmd of ruleCmds) {
+      lines.push(`  - command: "${cmd}"`);
+      lines.push("    default: allow");
+    }
+  }
+  return lines.join("\n");
+}
+function formatSystemMessage(decision, rawCommand, details) {
+  const header = decision === "deny" ? "[warden] Command blocked" : "[warden] Command flagged for review";
+  const lines = [header, ""];
+  const relevant = details.filter((d) => d.decision !== "allow");
+  if (relevant.length > 0) {
+    for (const d of relevant) {
+      lines.push(`- \`${d.command}\`: ${d.reason}`);
+    }
+    lines.push("");
+  }
+  const snippet = generateAllowSnippet(details);
+  if (snippet) {
+    lines.push("To allow this in the future, add to your warden config:");
+    lines.push("");
+    lines.push("```yaml");
+    lines.push(snippet);
+    lines.push("```");
+    lines.push("");
+    lines.push("Config locations:");
+    lines.push("- User-level (all projects): `~/.claude/warden.yaml`");
+    lines.push("- Project-level (this project): `.claude/warden.yaml`");
+    lines.push("");
+    lines.push("Project config takes priority over user config.");
+  }
+  return lines.join("\n");
 }
 
 // src/index.ts
@@ -19210,21 +19279,27 @@ async function main() {
   const parsed = parseCommand(command);
   const result = evaluate(parsed, config);
   if (result.decision === "allow") {
-    const output = {
+    const output2 = {
       hookSpecificOutput: {
         hookEventName: "PreToolUse",
         permissionDecision: "allow",
         permissionDecisionReason: `[warden] ${result.reason}`
       }
     };
-    process.stdout.write(JSON.stringify(output));
+    process.stdout.write(JSON.stringify(output2));
     process.exit(0);
   }
   if (result.decision === "deny") {
+    const msg2 = formatSystemMessage("deny", command, result.details);
+    const output2 = { systemMessage: msg2 };
+    process.stdout.write(JSON.stringify(output2));
     process.stderr.write(`[warden] Blocked: ${result.reason}
 `);
     process.exit(2);
   }
+  const msg = formatSystemMessage("ask", command, result.details);
+  const output = { systemMessage: msg };
+  process.stdout.write(JSON.stringify(output));
   process.exit(0);
 }
 main().catch(() => process.exit(0));

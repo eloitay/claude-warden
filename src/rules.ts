@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from 'fs';
 import { parse as parseYaml } from 'yaml';
 import { homedir } from 'os';
 import { join } from 'path';
-import type { WardenConfig } from './types';
+import type { WardenConfig, ConfigLayer } from './types';
 import { DEFAULT_CONFIG } from './defaults';
 
 const USER_CONFIG_PATHS = [
@@ -17,24 +17,48 @@ const PROJECT_CONFIG_NAMES = [
 
 export function loadConfig(cwd?: string): WardenConfig {
   const config = structuredClone(DEFAULT_CONFIG);
+  const defaultLayer = config.layers[0];
 
-  // Load user-level config
+  let userLayer: ConfigLayer | null = null;
+  let userRaw: Record<string, unknown> | null = null;
   for (const configPath of USER_CONFIG_PATHS) {
-    if (tryMergeConfigFile(config, configPath)) break;
-  }
-
-  // Load project-level config (overrides user-level)
-  if (cwd) {
-    for (const name of PROJECT_CONFIG_NAMES) {
-      if (tryMergeConfigFile(config, join(cwd, name))) break;
+    const result = tryLoadFile(configPath);
+    if (result) {
+      userLayer = extractLayer(result);
+      userRaw = result;
+      break;
     }
   }
+
+  let workspaceLayer: ConfigLayer | null = null;
+  let workspaceRaw: Record<string, unknown> | null = null;
+  if (cwd) {
+    for (const name of PROJECT_CONFIG_NAMES) {
+      const result = tryLoadFile(join(cwd, name));
+      if (result) {
+        workspaceLayer = extractLayer(result);
+        workspaceRaw = result;
+        break;
+      }
+    }
+  }
+
+  // Build layers: workspace > user > default
+  config.layers = [
+    ...(workspaceLayer ? [workspaceLayer] : []),
+    ...(userLayer ? [userLayer] : []),
+    defaultLayer,
+  ];
+
+  // Merge non-layer fields from user config, then workspace config (workspace wins)
+  if (userRaw) mergeNonLayerFields(config, userRaw);
+  if (workspaceRaw) mergeNonLayerFields(config, workspaceRaw);
 
   return config;
 }
 
-function tryMergeConfigFile(config: WardenConfig, filePath: string): boolean {
-  if (!existsSync(filePath)) return false;
+function tryLoadFile(filePath: string): Record<string, unknown> | null {
+  if (!existsSync(filePath)) return null;
 
   try {
     const raw = readFileSync(filePath, 'utf-8');
@@ -43,53 +67,39 @@ function tryMergeConfigFile(config: WardenConfig, filePath: string): boolean {
       : JSON.parse(raw);
 
     if (parsed && typeof parsed === 'object') {
-      mergeConfig(config, parsed);
-      return true;
+      return parsed as Record<string, unknown>;
     }
   } catch {
     // Skip invalid config files silently
   }
-  return false;
+  return null;
 }
 
-function mergeConfig(base: WardenConfig, override: Partial<WardenConfig>): void {
-  if (override.alwaysAllow) {
-    base.alwaysAllow = [...(base.alwaysAllow || []), ...override.alwaysAllow];
-  }
-  if (override.alwaysDeny) {
-    base.alwaysDeny = [...(base.alwaysDeny || []), ...override.alwaysDeny];
-  }
-  if (override.globalDeny) {
-    base.globalDeny = [...(base.globalDeny || []), ...override.globalDeny];
-  }
-  if (override.trustedSSHHosts) {
-    base.trustedSSHHosts = [...(base.trustedSSHHosts || []), ...override.trustedSSHHosts];
-  }
-  if (override.trustedDockerContainers) {
-    base.trustedDockerContainers = [...(base.trustedDockerContainers || []), ...override.trustedDockerContainers];
-  }
-  if (override.trustedKubectlContexts) {
-    base.trustedKubectlContexts = [...(base.trustedKubectlContexts || []), ...override.trustedKubectlContexts];
-  }
-  if (override.trustedSprites) {
-    base.trustedSprites = [...(base.trustedSprites || []), ...override.trustedSprites];
-  }
-  if (override.defaultDecision) {
-    base.defaultDecision = override.defaultDecision;
-  }
-  if (override.askOnSubshell !== undefined) {
-    base.askOnSubshell = override.askOnSubshell;
-  }
+function extractLayer(raw: Record<string, unknown>): ConfigLayer {
+  return {
+    alwaysAllow: Array.isArray(raw.alwaysAllow) ? raw.alwaysAllow : [],
+    alwaysDeny: Array.isArray(raw.alwaysDeny) ? raw.alwaysDeny : [],
+    rules: Array.isArray(raw.rules) ? raw.rules : [],
+  };
+}
 
-  // User rules override defaults by command name
-  if (override.rules) {
-    for (const userRule of override.rules) {
-      const idx = base.rules.findIndex(r => r.command === userRule.command);
-      if (idx >= 0) {
-        base.rules[idx] = userRule;
-      } else {
-        base.rules.push(userRule);
-      }
-    }
+function mergeNonLayerFields(config: WardenConfig, raw: Record<string, unknown>): void {
+  if (Array.isArray(raw.trustedSSHHosts)) {
+    config.trustedSSHHosts = [...(config.trustedSSHHosts || []), ...raw.trustedSSHHosts];
+  }
+  if (Array.isArray(raw.trustedDockerContainers)) {
+    config.trustedDockerContainers = [...(config.trustedDockerContainers || []), ...raw.trustedDockerContainers];
+  }
+  if (Array.isArray(raw.trustedKubectlContexts)) {
+    config.trustedKubectlContexts = [...(config.trustedKubectlContexts || []), ...raw.trustedKubectlContexts];
+  }
+  if (Array.isArray(raw.trustedSprites)) {
+    config.trustedSprites = [...(config.trustedSprites || []), ...raw.trustedSprites];
+  }
+  if (typeof raw.defaultDecision === 'string') {
+    config.defaultDecision = raw.defaultDecision as WardenConfig['defaultDecision'];
+  }
+  if (typeof raw.askOnSubshell === 'boolean') {
+    config.askOnSubshell = raw.askOnSubshell;
   }
 }

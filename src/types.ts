@@ -40,16 +40,14 @@ export interface CommandRule {
   argPatterns?: ArgPattern[];
 }
 
-export interface GlobalPattern {
-  pattern: string;
-  reason: string;
+export interface ConfigLayer {
+  alwaysAllow: string[];
+  alwaysDeny: string[];
+  rules: CommandRule[];
 }
 
 export interface WardenConfig {
-  rules: CommandRule[];
-  globalDeny?: GlobalPattern[];
-  alwaysAllow?: string[];
-  alwaysDeny?: string[];
+  layers: ConfigLayer[];
   trustedSSHHosts?: string[];
   trustedDockerContainers?: string[];
   trustedKubectlContexts?: string[];
