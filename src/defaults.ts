@@ -101,7 +101,7 @@ export const DEFAULT_CONFIG: WardenConfig = {
         default: 'ask',
         argPatterns: [
           {
-            match: { anyArgMatches: ['^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$'] },
+            match: { anyArgMatches: ['^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel|json)$'] },
             decision: 'allow',
             description: 'Well-known dev tools',
           },
@@ -113,7 +113,7 @@ export const DEFAULT_CONFIG: WardenConfig = {
         default: 'ask',
         argPatterns: [
           {
-            match: { anyArgMatches: ['^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel)$'] },
+            match: { anyArgMatches: ['^(jest|vitest|tsx|ts-node|tsc|eslint|prettier|mkdirp|concurrently|turbo|next|nuxt|vite|astro|playwright|cypress|mocha|nyc|c8|nodemon|ts-jest|tsup|esbuild|rollup|webpack|prisma|drizzle-kit|typeorm|knex|sequelize-cli|tailwindcss|postcss|autoprefixer|lint-staged|husky|changeset|semantic-release|lerna|nx|create-react-app|create-next-app|create-vite|degit|storybook|wrangler|netlify|vercel|json)$'] },
             decision: 'allow',
             description: 'Well-known dev tools',
           },
