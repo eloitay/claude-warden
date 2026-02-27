@@ -1,0 +1,89 @@
+<svg width="1200" height="630" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0a0e17"/>
+      <stop offset="100%" stop-color="#111827"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="#ffffff"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="#a78bfa"/>
+    </linearGradient>
+    <linearGradient id="glowLine" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0%" stop-color="transparent"/>
+      <stop offset="50%" stop-color="#60a5fa"/>
+      <stop offset="100%" stop-color="transparent"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <!-- Subtle grid -->
+  <g opacity="0.05" stroke="#60a5fa" stroke-width="1">
+    <line x1="0" y1="100" x2="1200" y2="100"/>
+    <line x1="0" y1="200" x2="1200" y2="200"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+    <line x1="0" y1="400" x2="1200" y2="400"/>
+    <line x1="0" y1="500" x2="1200" y2="500"/>
+    <line x1="200" y1="0" x2="200" y2="630"/>
+    <line x1="400" y1="0" x2="400" y2="630"/>
+    <line x1="600" y1="0" x2="600" y2="630"/>
+    <line x1="800" y1="0" x2="800" y2="630"/>
+    <line x1="1000" y1="0" x2="1000" y2="630"/>
+  </g>
+
+  <!-- Glow effects -->
+  <ellipse cx="600" cy="200" rx="400" ry="200" fill="#60a5fa" opacity="0.06"/>
+  <ellipse cx="800" cy="450" rx="300" ry="150" fill="#a78bfa" opacity="0.04"/>
+
+  <!-- Badge -->
+  <rect x="460" y="140" width="280" height="32" rx="16" fill="rgba(96,165,250,0.12)" stroke="rgba(96,165,250,0.25)" stroke-width="1"/>
+  <circle cx="488" cy="156" r="4" fill="#34d399"/>
+  <text x="504" y="161" font-family="Inter, Helvetica, Arial, sans-serif" font-size="14" font-weight="500" fill="#60a5fa">Claude Code Plugin</text>
+
+  <!-- Title -->
+  <text x="600" y="240" text-anchor="middle" font-family="Inter, Helvetica, Arial, sans-serif" font-size="64" font-weight="800" fill="url(#titleGrad)">Claude Warden</text>
+
+  <!-- Subtitle -->
+  <text x="600" y="290" text-anchor="middle" font-family="Inter, Helvetica, Arial, sans-serif" font-size="22" fill="#94a3b8">Smart command safety filter for Claude Code</text>
+
+  <!-- Decorative line -->
+  <rect x="200" y="320" width="800" height="1" fill="url(#glowLine)"/>
+
+  <!-- Terminal preview -->
+  <rect x="250" y="350" width="700" height="180" rx="12" fill="#0d1117" stroke="#1e293b" stroke-width="1"/>
+
+  <!-- Terminal header dots -->
+  <circle cx="278" cy="374" r="6" fill="#ff5f57"/>
+  <circle cx="298" cy="374" r="6" fill="#febc2e"/>
+  <circle cx="318" cy="374" r="6" fill="#28c840"/>
+  <text x="600" y="378" text-anchor="middle" font-family="JetBrains Mono, Courier New, monospace" font-size="11" fill="#64748b">warden evaluation</text>
+
+  <!-- Terminal divider -->
+  <rect x="250" y="392" width="700" height="1" fill="#1e293b"/>
+
+  <!-- Command line -->
+  <text x="278" y="425" font-family="JetBrains Mono, Courier New, monospace" font-size="15" fill="#22d3ee">$</text>
+  <text x="298" y="425" font-family="JetBrains Mono, Courier New, monospace" font-size="15" fill="#e2e8f0">npm run build </text>
+  <text x="445" y="425" font-family="JetBrains Mono, Courier New, monospace" font-size="15" font-weight="700" fill="#fbbf24">&amp;&amp;</text>
+  <text x="475" y="425" font-family="JetBrains Mono, Courier New, monospace" font-size="15" fill="#e2e8f0"> rm -rf /</text>
+
+  <!-- Result cards -->
+  <rect x="278" y="448" width="155" height="36" rx="6" fill="rgba(52,211,153,0.1)" stroke="rgba(52,211,153,0.3)" stroke-width="1"/>
+  <text x="296" y="471" font-family="JetBrains Mono, Courier New, monospace" font-size="12" fill="#34d399">npm run build</text>
+  <rect x="440" y="452" width="56" height="24" rx="4" fill="rgba(52,211,153,0.15)"/>
+  <text x="450" y="468" font-family="JetBrains Mono, Courier New, monospace" font-size="10" font-weight="700" fill="#34d399">ALLOW</text>
+
+  <rect x="520" y="448" width="155" height="36" rx="6" fill="rgba(248,113,113,0.1)" stroke="rgba(248,113,113,0.3)" stroke-width="1"/>
+  <text x="538" y="471" font-family="JetBrains Mono, Courier New, monospace" font-size="12" fill="#f87171">rm -rf /</text>
+  <rect x="660" y="452" width="48" height="24" rx="4" fill="rgba(248,113,113,0.15)"/>
+  <text x="670" y="468" font-family="JetBrains Mono, Courier New, monospace" font-size="10" font-weight="700" fill="#f87171">DENY</text>
+
+  <!-- Final result -->
+  <rect x="420" y="498" width="160" height="36" rx="8" fill="rgba(248,113,113,0.12)" stroke="rgba(248,113,113,0.4)" stroke-width="2"/>
+  <text x="500" y="522" text-anchor="middle" font-family="JetBrains Mono, Courier New, monospace" font-size="18" font-weight="800" fill="#f87171">DENY</text>
+
+  <!-- Bottom text -->
+  <text x="600" y="590" text-anchor="middle" font-family="JetBrains Mono, Courier New, monospace" font-size="14" fill="#64748b">auto-approve safe · block dangerous · ask about the rest</text>
+</svg>
