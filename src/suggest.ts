@@ -37,6 +37,33 @@ export function generateAllowSnippet(details: CommandEvalDetail[]): string {
   return lines.join('\n');
 }
 
+export function generateFullAllowSnippet(command: string): string {
+  const lines = [
+    'rules:',
+    `  - command: "${command}"`,
+    '    default: allow',
+  ];
+  return lines.join('\n');
+}
+
+export function generateSubcommandSnippet(command: string, subcommand: string): string {
+  const lines = [
+    'rules:',
+    `  - command: "${command}"`,
+    '    default: ask',
+    '    argPatterns:',
+    '      - match:',
+    `          anyArgMatches: ['^${escapeRegex(subcommand)}$']`,
+    '        decision: allow',
+    `        description: Allow ${command} ${subcommand}`,
+  ];
+  return lines.join('\n');
+}
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 export function formatSystemMessage(
   decision: 'deny' | 'ask',
   rawCommand: string,
@@ -44,10 +71,24 @@ export function formatSystemMessage(
 ): string {
   const relevant = details.filter(d => d.decision !== 'allow');
 
-  // Compact single-line format for ask decisions
+  // Compact format for ask decisions
   if (decision === 'ask') {
     const parts = relevant.map(d => `\`${d.command}\`: ${d.reason}`);
-    return `[warden] ${parts.join(' | ')} — To auto-allow, see /warden-allow`;
+    const header = `[warden] ${parts.join(' | ')}`;
+
+    // Check if any flagged command has args that could be a sub-command
+    const subcommandHints = relevant
+      .filter(d => d.args.length > 0)
+      .map(d => {
+        const sub = d.args[0];
+        return `  Option A: Allow all \`${d.command}\` → \`/warden-allow ${d.command}\`\n  Option B: Allow only \`${d.command} ${sub}\` → \`/warden-allow ${d.command} ${sub}\``;
+      });
+
+    if (subcommandHints.length > 0) {
+      return `${header}\n${subcommandHints.join('\n')}\nSee /warden-allow`;
+    }
+
+    return `${header} — To auto-allow, see /warden-allow`;
   }
 
   // Verbose format for deny decisions

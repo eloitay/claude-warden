@@ -19397,7 +19397,18 @@ function formatSystemMessage(decision, rawCommand, details) {
   const relevant = details.filter((d) => d.decision !== "allow");
   if (decision === "ask") {
     const parts = relevant.map((d) => `\`${d.command}\`: ${d.reason}`);
-    return `[warden] ${parts.join(" | ")} \u2014 To auto-allow, see /warden-allow`;
+    const header = `[warden] ${parts.join(" | ")}`;
+    const subcommandHints = relevant.filter((d) => d.args.length > 0).map((d) => {
+      const sub = d.args[0];
+      return `  Option A: Allow all \`${d.command}\` \u2192 \`/warden-allow ${d.command}\`
+  Option B: Allow only \`${d.command} ${sub}\` \u2192 \`/warden-allow ${d.command} ${sub}\``;
+    });
+    if (subcommandHints.length > 0) {
+      return `${header}
+${subcommandHints.join("\n")}
+See /warden-allow`;
+    }
+    return `${header} \u2014 To auto-allow, see /warden-allow`;
   }
   const lines = ["[warden] Command blocked", ""];
   if (relevant.length > 0) {
