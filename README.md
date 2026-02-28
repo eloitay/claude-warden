@@ -168,6 +168,35 @@ All support glob patterns: `*`, `?`, `[...]`, `[!...]`, `{a,b,c}`
 5. Results are combined: any deny → deny whole pipeline, any ask → ask, all allow → allow
 6. Returns the decision via stdout JSON (allow/ask) or exit code 2 (deny), with a system message explaining the reasoning for deny/ask decisions
 
+## FAQ
+
+### Warden says "All commands are safe" but I still get a permission prompt
+
+This usually means **another plugin's hook** is overriding Warden's decision. When multiple PreToolUse hooks run, Claude Code uses "most restrictive wins" — if any hook returns `ask`, it overrides another hook's `allow`.
+
+**Common culprit:** The `github-dev` plugin ships a `git_commit_confirm.py` hook that returns `permissionDecision: "ask"` for every `git commit` command, regardless of what Warden decides. You'll see something like:
+
+```
+Hook PreToolUse:Bash requires confirmation for this command:
+[warden] All commands are safe
+```
+
+Warden evaluated the command as safe, but the other hook forced a confirmation prompt.
+
+**How to fix:** Uninstall or disable the conflicting plugin. For example:
+
+```
+/plugin uninstall github-dev
+```
+
+**How to diagnose:** If you see Warden's `[warden] All commands are safe` message alongside a permission prompt, another hook is the cause. Check your installed plugins for PreToolUse hooks:
+
+```
+/plugin list
+```
+
+Then inspect each plugin's `hooks/hooks.json` for PreToolUse entries targeting `Bash`.
+
 ## Development
 
 ```bash
