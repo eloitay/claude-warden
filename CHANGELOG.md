@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.10.3] - 2026-05-18
+
+### Features
+- feat(defaults): allow read-only `composio` CLI subcommands and `execute` with read verbs (GET/LIST/SEARCH/FETCH/READ/COUNT/RETRIEVE/FIND/VIEW/SHOW/DESCRIBE/CHECK), plus `--get-schema` / `--dry-run` flags and `COMPOSIO_SEARCH_TOOLS` discovery; mutating slugs and `link`/`listen`/`proxy`/`run` still ask
+
 ## [2.10.2] - 2026-05-07
 
 ### Bug Fixes

@@ -649,6 +649,19 @@ export const DEFAULT_CONFIG: WardenConfig = {
         VERSION_HELP_FLAGS,
       ]},
 
+      // --- Composio CLI ---
+      // Auth is persistent in ~/.composio/, so most discovery/inspection is safe.
+      // `execute` is allowed only for slugs whose verb matches a read pattern
+      // (GET/LIST/SEARCH/FETCH/READ/COUNT/RETRIEVE/FIND/VIEW/SHOW/DESCRIBE/CHECK).
+      // Everything else (link, listen, proxy, run, mutating execute) falls through to ask.
+      { command: 'composio', default: 'ask', argPatterns: [
+        { match: { anyArgMatches: ['^(search|whoami|apps|connections|triggers|list|ls|tools|dev)$'] }, decision: 'allow', description: 'Read-only composio subcommands' },
+        { match: { anyArgMatches: ['^--(get-schema|dry-run)$'] }, decision: 'allow', description: 'Schema inspection / dry-run flags' },
+        { match: { argsMatch: ['^execute\\s+([A-Z0-9]+_)*(GET|LIST|SEARCH|FETCH|READ|COUNT|RETRIEVE|FIND|VIEW|SHOW|DESCRIBE|CHECK)(_[A-Z0-9_]+)?(\\s|$)'] }, decision: 'allow', description: 'Read-only execute (GET/LIST/SEARCH/...)' },
+        { match: { argsMatch: ['^execute\\s+\\S*COMPOSIO_SEARCH_TOOLS\\b'] }, decision: 'allow', description: 'Tool discovery slug' },
+        VERSION_HELP_FLAGS,
+      ]},
+
       // --- Helm ---
       { command: 'helm', default: 'ask', argPatterns: [
         { match: { anyArgMatches: ['^(list|search|show|status|get|template|version|env|history)$'] }, decision: 'allow', description: 'Read-only helm commands' },

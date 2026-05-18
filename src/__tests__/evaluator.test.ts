@@ -1262,4 +1262,74 @@ describe('evaluator', () => {
       expect(evalWith('fly ssh console -a my-app -C "bash"', { trustedRemotes: toRemotes(apps, 'fly') }).decision).toBe('allow');
     });
   });
+
+  describe('composio', () => {
+    it('allows composio --help', () => {
+      expect(eval_('composio --help').decision).toBe('allow');
+    });
+
+    it('allows composio whoami', () => {
+      expect(eval_('composio whoami').decision).toBe('allow');
+    });
+
+    it('allows composio search "linear issues"', () => {
+      expect(eval_('composio search "linear issues"').decision).toBe('allow');
+    });
+
+    it('allows execute with GET slug', () => {
+      expect(eval_('composio execute LINEAR_GET_LINEAR_ISSUE -d {"issue_id":"ENG-1"}').decision).toBe('allow');
+    });
+
+    it('allows execute with LIST slug', () => {
+      expect(eval_('composio execute SLACK_LIST_ALL_CHANNELS').decision).toBe('allow');
+    });
+
+    it('allows execute with FETCH slug', () => {
+      expect(eval_('composio execute GMAIL_FETCH_EMAILS').decision).toBe('allow');
+    });
+
+    it('allows execute with SEARCH slug', () => {
+      expect(eval_('composio execute LINEAR_SEARCH_ISSUES').decision).toBe('allow');
+    });
+
+    it('allows COMPOSIO_SEARCH_TOOLS discovery', () => {
+      expect(eval_('composio execute COMPOSIO_SEARCH_TOOLS -d {}').decision).toBe('allow');
+    });
+
+    it('allows --get-schema inspection', () => {
+      expect(eval_('composio execute LINEAR_CREATE_ISSUE --get-schema').decision).toBe('allow');
+    });
+
+    it('allows --dry-run', () => {
+      expect(eval_('composio execute LINEAR_CREATE_ISSUE --dry-run -d {}').decision).toBe('allow');
+    });
+
+    it('asks for execute with CREATE slug', () => {
+      expect(eval_('composio execute LINEAR_CREATE_ISSUE -d {}').decision).toBe('ask');
+    });
+
+    it('asks for execute with SEND slug', () => {
+      expect(eval_('composio execute SLACK_SEND_MESSAGE -d {}').decision).toBe('ask');
+    });
+
+    it('asks for execute with DELETE slug', () => {
+      expect(eval_('composio execute LINEAR_DELETE_ISSUE -d {}').decision).toBe('ask');
+    });
+
+    it('asks for execute with UPDATE slug', () => {
+      expect(eval_('composio execute LINEAR_UPDATE_AN_EXISTING_ISSUE -d {}').decision).toBe('ask');
+    });
+
+    it('asks for composio link', () => {
+      expect(eval_('composio link slack').decision).toBe('ask');
+    });
+
+    it('asks for composio listen', () => {
+      expect(eval_('composio listen').decision).toBe('ask');
+    });
+
+    it('asks for composio proxy', () => {
+      expect(eval_('composio proxy GET /v1/me --toolkit github').decision).toBe('ask');
+    });
+  });
 });
