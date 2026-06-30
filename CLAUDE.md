@@ -41,7 +41,7 @@ The hook communicates with Claude Code via the PreToolUse hook protocol:
 npm publish runs **locally** — CI only creates the GitHub tag + release. OIDC trusted publishing from CI kept failing with 404s on the registry PUT, so we dropped it.
 
 1. Bump version on a `release/vX.Y.Z` branch, update CHANGELOG.md, open PR.
-2. Merge PR to `main` with a merge commit (main is protected — no direct pushes, squash disabled). The commit message must start with `chore: release v<version>`.
+2. Merge PR to `main` with a merge commit. The commit message must start with `chore: release v<version>`.
 3. `auto-release.yml` picks up the release commit on main, tags it, and creates the GitHub release from the CHANGELOG entry.
 4. Locally: `git checkout vX.Y.Z && pnpm install --frozen-lockfile && npm publish --access public`. The `prepublishOnly` script syncs plugin version, builds, and tests before publishing.
 
