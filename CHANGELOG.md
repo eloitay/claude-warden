@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.11.0] - 2026-06-30
+
+### Features
+- feat: add OpenCode plugin adapter (075d522)
+- feat(pnpm-workspace.yaml): Introduce allowBuilds configuration for esbuild in pnpm-workspace.yaml (02e0081)
+
+### Other Changes
+- chore: remove PR requirement from main branch ruleset (88ffe2f)
+
 ## [2.10.3] - 2026-05-18
 
 ### Features
